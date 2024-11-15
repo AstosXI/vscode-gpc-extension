@@ -44,7 +44,8 @@ const DataTypes = new Map([
     ['dint32', { kind: CompletionItemKind.Enum, detail: 'Signed 32-bit integer. (-214673648, 2147483647)', documentation: ''}],
     ['dint8', { kind: CompletionItemKind.Enum, detail: 'Signed 8-bit integer. (-128, 127)', documentation: ''}],
     ['dint16', { kind: CompletionItemKind.Enum, detail: 'Signed 16-bit integer. (-32768, 32767)', documentation: ''}],
-    ['data', { kind: CompletionItemKind.Enum, detail: '', documentation:''}]
+    ['data', { kind: CompletionItemKind.Enum, detail: '', documentation:''}],
+    ['image', { kind: CompletionItemKind.Enum, detail: 'Image variable for the Oled Screen.', documentation: ''}]
 ]);
 
 const Constants = new Map([
@@ -926,41 +927,26 @@ const Constants = new Map([
     ['RUMBLE_RT', {kind: CompletionItemKind.Constant, details: '', documentation: ''}],
     ['RUMBLE_LT', {kind: CompletionItemKind.Constant, details: '', documentation: ''}],
     ['PS5_ADT_MODE', {kind: CompletionItemKind.Constant, details: '', documentation: ''}],
-    ['PS5_ADT_MODE', {kind: CompletionItemKind.Constant, details: '', documentation: ''}],
-    ['PS5_ADT_START', {kind: CompletionItemKind.Constant, details: '', documentation: ''}],
     ['PS5_ADT_START', {kind: CompletionItemKind.Constant, details: '', documentation: ''}],
     ['PS5_ADT_FORCE1', {kind: CompletionItemKind.Constant, details: '', documentation: ''}],
-    ['PS5_ADT_FORCE1', {kind: CompletionItemKind.Constant, details: '', documentation: ''}],
-    ['PS5_ADT_FORCE2', {kind: CompletionItemKind.Constant, details: '', documentation: ''}],
     ['PS5_ADT_FORCE2', {kind: CompletionItemKind.Constant, details: '', documentation: ''}],
     ['PS5_ADT_STRENGTH_LOW', {kind: CompletionItemKind.Constant, details: '', documentation: ''}],
-    ['PS5_ADT_STRENGTH_LOW', {kind: CompletionItemKind.Constant, details: '', documentation: ''}],
-    ['PS5_ADT_STRENGTH_MID', {kind: CompletionItemKind.Constant, details: '', documentation: ''}],
     ['PS5_ADT_STRENGTH_MID', {kind: CompletionItemKind.Constant, details: '', documentation: ''}],
     ['PS5_ADT_STRENGTH_HIGH', {kind: CompletionItemKind.Constant, details: '', documentation: ''}],
-    ['PS5_ADT_STRENGTH_HIGH', {kind: CompletionItemKind.Constant, details: '', documentation: ''}],
-    ['PS5_ADT_FREQ', {kind: CompletionItemKind.Constant, details: '', documentation: ''}],
     ['PS5_ADT_FREQ', {kind: CompletionItemKind.Constant, details: '', documentation: ''}],
     ['PS5_ADT_NR', {kind: CompletionItemKind.Constant, details: '', documentation: ''}],
-    ['PS5_ADT_NR', {kind: CompletionItemKind.Constant, details: '', documentation: ''}],
-    ['PS5_ADT_CR', {kind: CompletionItemKind.Constant, details: '', documentation: ''}],
     ['PS5_ADT_CR', {kind: CompletionItemKind.Constant, details: '', documentation: ''}],
     ['PS5_ADT_SR', {kind: CompletionItemKind.Constant, details: '', documentation: ''}],
-    ['PS5_ADT_SR', {kind: CompletionItemKind.Constant, details: '', documentation: ''}],
-    ['PS5_ADT_EF1', {kind: CompletionItemKind.Constant, details: '', documentation: ''}],
     ['PS5_ADT_EF1', {kind: CompletionItemKind.Constant, details: '', documentation: ''}],
     ['PS5_ADT_EF2', {kind: CompletionItemKind.Constant, details: '', documentation: ''}],
-    ['PS5_ADT_EF2', {kind: CompletionItemKind.Constant, details: '', documentation: ''}],
-    ['PS5_ADT_OFF', {kind: CompletionItemKind.Constant, details: '', documentation: ''}],
     ['PS5_ADT_OFF', {kind: CompletionItemKind.Constant, details: '', documentation: ''}],
     ['PS5_ADT_NO_RES1', {kind: CompletionItemKind.Constant, details: '', documentation: ''}],
-    ['PS5_ADT_NO_RES1', {kind: CompletionItemKind.Constant, details: '', documentation: ''}],
-    ['PS5_ADT_NO_RES2', {kind: CompletionItemKind.Constant, details: '', documentation: ''}],
     ['PS5_ADT_NO_RES2', {kind: CompletionItemKind.Constant, details: '', documentation: ''}],
     ['PS5_ADT_HAS_RES1', {kind: CompletionItemKind.Constant, details: '', documentation: ''}],
-    ['PS5_ADT_HAS_RES1', {kind: CompletionItemKind.Constant, details: '', documentation: ''}],
     ['PS5_ADT_HAS_RES2', {kind: CompletionItemKind.Constant, details: '', documentation: ''}],
-    ['PS5_ADT_HAS_RES2', {kind: CompletionItemKind.Constant, details: '', documentation: ''}],
+    ['PS5_ADT_UNK1', { kind: CompletionItemKind.Constant, details: '', documentation: ''}],
+    ['PS5_ADT_UNK2', { kind: CompletionItemKind.Constant, details: '', documentation: ''}],
+    ['PS5_ADT_UNK3', { kind: CompletionItemKind.Constant, details: '', documentation: ''}],
     ['PS5_PS', {kind: CompletionItemKind.Constant, details: '', documentation: ''}],
     ['PS5_SHARE', {kind: CompletionItemKind.Constant, details: '', documentation: ''}],
     ['PS5_OPTIONS', {kind: CompletionItemKind.Constant, details: '', documentation: ''}],
@@ -995,7 +981,8 @@ const Constants = new Map([
     ['PS5_FINGER1', {kind: CompletionItemKind.Constant, details: '', documentation: ''}],
     ['PS5_FINGER2X', {kind: CompletionItemKind.Constant, details: '', documentation: ''}],
     ['PS5_FINGER2Y', {kind: CompletionItemKind.Constant, details: '', documentation: ''}],
-    ['PS5_FINGER2', {kind: CompletionItemKind.Constant, details: '', documentation: ''}]
+    ['PS5_FINGER2', {kind: CompletionItemKind.Constant, details: '', documentation: ''}],
+
 ]);
 
 const BuiltInFunctions = new Map([
@@ -1112,7 +1099,7 @@ connection.onInitialize(() => {
             textDocumentSync: TextDocumentSyncKind.Incremental,
             completionProvider: {
                 resolveProvider: true,
-                triggerCharacters: 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('')  // Trigger on any letter
+                triggerCharacters: 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('')
             },
             hoverProvider: true,
             definitionProvider: true
@@ -1132,10 +1119,9 @@ function parseVariables(document) {
 
     const intPattern = /int\s+(\w+)\s*(?:=\s*([\w\d]+))?;/g;
     const stringPattern = /const\s+string\s+(\w+)\s*\[\]\s*=\s*\{([^\}]+)\};/g;
-    const array1DPattern = /const\s+(int8|int16|int32|uint8|uint16|uint32)\s+(\w+)\s*\[\]\s*=\s*\{([^\}]+)\};/g;
-    const array2DPattern = /const\s+(int8|int16|int32|uint8|uint16|uint32)\s+(\w+)\s*\[\]\[\]\s*=\s*\{(\s*\{[^}]*\}\s*(?:,\s*\{[^}]*\}\s*)*)\};/g;
-    const enumPattern = /enum\s*\{\s*([^\}]+?)\s*\}/g;
-
+    const array1DPattern = /const\s+(int8|int16|int32|uint8|uint16|uint32|string)\s+(\w+)\s*\[\]\s*=\s*\{([^\}]+)\};/g;
+    const array2DPattern = /const\s+(int8|int16|int32|uint8|uint16|uint32)\s+(\w+)\s*\[\]\[\]\s*=\s*\{([\s\S]*?)\};/g;
+    const enumPattern = /enum\s*(?:\/\*[\s\S]*?\*\/|\s*\/\/[^\n]*\n)?\s*\{[\s\S]*?\}/g;    
     variableDeclarations.clear();
 
     let match;
@@ -1184,13 +1170,25 @@ function parseVariables(document) {
         const content = match[3];
         
         const rows = content.match(/\{[^}]*\}/g) || [];
-        
-        const formattedRows = rows.map(row => {
-            const values = row.slice(1, -1).split(',').map(v => v.trim()).filter(Boolean);
+        const cleanRows = rows.map(row => {
+            const values = row
+                .slice(1, -1)
+                .split(',')
+                .map(v => v
+                    .replace(/\/\*[\s\S]*?\*\//g, '')
+                    .replace(/\/\/[^\n]*/g, '')
+                    .trim()
+                )
+                .filter(Boolean);
+            
             return `{${values.join(', ')}}`;
         });
         
-        const documentation = `const ${type} ${arrayName}[][] = {\n  ${formattedRows.join(',\n  ')}\n};`;
+        const documentationRows = content.split('\n').map(line => {
+            return line.trim();
+        }).filter(Boolean);
+        
+        const documentation = `const ${type} ${arrayName}[][] = {\n  ${documentationRows.join('\n  ')}\n};`;
         
         variableDeclarations.set(arrayName, {
             type: 'array',
@@ -1200,8 +1198,16 @@ function parseVariables(document) {
     }
 
     while ((match = enumPattern.exec(text)) !== null) {
-        const enumContent = match[1];
-        const variables = enumContent.split(',').map(variable => variable.trim()).filter(variable => variable);
+        const enumContent = match[0].slice(match[0].indexOf('{') + 1, match[0].lastIndexOf('}'));
+        
+        const variables = enumContent
+            .replace(/\/\*[\s\S]*?\*\//g, '') 
+            .replace(/\/\/[^\n]*/g, '')        
+            .split(',')
+            .map(variable => variable.trim())
+            .map(variable => variable.split('=')[0].trim())
+            .filter(variable => variable);
+    
         variables.forEach(variable => {
             variableDeclarations.set(variable, {
                 type: 'enum',
@@ -1461,7 +1467,6 @@ connection.onCompletionResolve((item) => {
     return item;
 });
 
-// Provide hover information for keywords and variables
 connection.onHover((params) => {
     const document = documents.get(params.textDocument.uri);
     if (!document) return null;

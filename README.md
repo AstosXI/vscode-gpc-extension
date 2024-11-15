@@ -8,6 +8,7 @@ GPC is a programming language developed and maintained by Collective Minds, made
 * Intellisense Features
 * Auto-Completion
 * Syntax Highlighting
+* Intellisense will not show 2D or 1D arrays if they do not contain a ';' 
 
 ## Examples
 
@@ -30,7 +31,5 @@ GPC is a programming language developed and maintained by Collective Minds, made
 ![](images/example2.png)
 
 # Disclaimer
-
-I am not an Employee of Microsoft, Sony, Nintendo, Collective Minds or Logitech. I am a solo developer.
 
 Any trademarks related to this repository are owned by their respective owners.

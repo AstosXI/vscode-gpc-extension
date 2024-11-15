@@ -2,12 +2,18 @@
   "name": "gpc-kiwiko",
   "displayName": "GPC Scripting",
   "description": "GPC Compatibility",
-  "version": "1.0.0",
-  "repository": "",
+  "publisher": "zKiwiko",
+  "version": "1.0.3",
+  "icon": "images/cronus.png",
+  "repository": {
+    "type": "git",
+    "url" : "https://github.com/zKiwiko/vscode-gpc-extension.git"
+  },
   "gallerBanner": {
     "color": "#000000",
     "theme": "dark",
-    "id": "./images/cronus.png"
+    "dark": "./images/cronus.png",
+    "light": "./images/cronus.png"
   },
   "engines": {
     "vscode": "^1.90.0"
@@ -39,26 +45,10 @@
         "scopeName": "source.gpc",
         "path": "./syntaxes/gpc.tmLanguage.json"
       }
-    ],
-    "commands": [
-      {
-        "command": "extension.command1",
-        "title": "GPC: Command 1"
-      }
-    ],
-    "menus": {
-      "editor/context": [
-        {
-          "command": "extension.command1",
-          "group": "navigation",
-          "when": "editorLangId == gpc"
-        }
-      ]
-    }
+    ]
   },
   "scripts": {
-    "install:client": "cd client && npm install",
-    "install:server": "cd server && npm install"
+    "vscode:prepublish": "npm install"
   },
   "dependencies": {
     "vscode-languageclient": "^8.1.0"

@@ -8,25 +8,20 @@ const {
 let client;
 
 function activate(context) {
-  // Register the command
   let disposable = vscode.commands.registerCommand('extension.command1', () => {
-    // Command implementation here
     vscode.window.showInformationMessage('GPC Command 1 executed!');
   });
 
   context.subscriptions.push(disposable);
 
-  // The server is implemented in node
   const serverModule = context.asAbsolutePath(
     path.join('server', 'src', 'server.js')
   );
 
-  // The debug options for the server
   const debugOptions = {
     execArgv: ['--nolazy', '--inspect=6009']
   };
 
-  // Server options
   const serverOptions = {
     run: { 
       module: serverModule, 
@@ -39,7 +34,6 @@ function activate(context) {
     }
   };
 
-  // Client options
   const clientOptions = {
     documentSelector: [{ scheme: 'file', language: 'gpc' }],
     synchronize: {
@@ -47,7 +41,6 @@ function activate(context) {
     }
   };
 
-  // Create the language client
   client = new LanguageClient(
     'gpcLanguageServer',
     'GPC Language Server',
@@ -55,8 +48,6 @@ function activate(context) {
     clientOptions
   );
 
-  // Start the client
-  console.log("Started Client");
   client.start();
 }
 
