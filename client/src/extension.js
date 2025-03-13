@@ -1,5 +1,7 @@
 const path = require('path');
 const vscode = require('vscode');
+const BUILD = require('./build');
+
 const {
   LanguageClient,
   TransportKind
@@ -8,11 +10,11 @@ const {
 let client;
 
 function activate(context) {
-  let disposable = vscode.commands.registerCommand('extension.command1', () => {
-    vscode.window.showInformationMessage('GPC Command 1 executed!');
+  let build = vscode.commands.registerCommand('gpc.build', async () => {
+    BUILD.build_project(context);
   });
 
-  context.subscriptions.push(disposable);
+  context.subscriptions.push(build);
 
   const serverModule = context.asAbsolutePath(
     path.join('server', 'src', 'server.js')
@@ -46,6 +48,12 @@ function activate(context) {
     'GPC Language Server',
     serverOptions,
     clientOptions
+  );
+
+  vscode.workspace.getConfiguration("workbench").update(
+    "iconTheme",
+    "gpc-icons",
+    vscode.ConfigurationTarget.Global
   );
 
   client.start();

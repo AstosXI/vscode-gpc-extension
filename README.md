@@ -1,35 +1,73 @@
 # About
 
-This extension adds GPC Scripting support to VSCode.
-
-GPC is a programming language developed and maintained by Collective Minds, made for the Cronus Zen Device.
+This extension adds full GPC Scripting support for Visual Studio Code, offering a wide range of features and tools to enhance your development experience.
 
 ## Features
-* Intellisense Features
-* Auto-Completion
-* Syntax Highlighting
-* Intellisense will not show 2D or 1D arrays if they do not contain a ';' 
+### Language Support
+- Full syntax highlighting for GPC files
+- IntelliSense support with:
+  - Code completion for Variables, Functions, Combos, and Built-in functions
+  - Hover information
 
-## Examples
+### Smart Diagnostics
+- Real time error detection for:
+  - Invalid function parameter counts
+  - String quote validation
+  - Decimal number warnings
+  - Unknown character warnings
+- Toriel Build System
+  - https://github.com/zKiwiko/Toriel-BT
 
-### Syntax Highlighting
-#### Highlighting is dependent on the theme you use.
-![](images/example4.png)
+### Code Snippets
+Quick templates for common GPC/C like constructs:
+- For loops (`For~`)
+- While loops (`While~`)
+- If statements (`If~`)
+- If-else statements (`Ifelse~`)
+- Function definitions (`Function~`)
 
-### Language Functions
-#### Intellisense is able to recognize the built-in functions GPC has, and provides details about each one from: https://guide.cronus.support/gpc
-![](images/example3.png)
+### Toriel Built System Intergration
+Built-in support for [Toriel BT](https://github.com/zKiwiko/Toriel-BT).
+
+Toriel BT is completely optional to use, for more information on the build process and its features, check here: https://github.com/zKiwiko/Toriel-IDE?tab=readme-ov-file#project-structuring
+
+## Requirements
+- Visual Studio Code Version 1.98.0 or higher
+- GPC Knowledge
+
+## Setup
+1. Install the extension from the VS Code marketplace
+2. Create or open a GPC project or file
+3. For built functionality, ensure you have a valid `project.json` file in your workspace's root directory.
 
 
-### Language Constants
-#### Intellisense is able to recognized all type constants that GPC has. This example shows buttons for the Xbox One Controller.
-![](images/example.png)
+### Toriel Project Configuration
+Create a `project.json` file in your project's root directory containing:
+```JSON
+{
+   "project" : {
+      "name": "",
+      "version": "",
+      "source": "",
+      },
+   "headers": []
+}
+```
+### Configuration Fields
+- `name`: Your project name (used for build output)
+- `version`: Project version
+- `source`: Main entry point file
+- `headers`: Array of header files used in project
+- `std`: Array of standard library files used
 
+## Commands
+- Build Project: `Ctrl+Shift+P` → "GPC: Build project with Toriel"
 
-### User Defined Functions
-#### The intellisense is able to recognize all User-Defined Functions. Showing how they're defined and the parameters associated with it.
-![](images/example2.png)
+## Contributing
+Feel free to open issues or submit pull requests on the [GitHub repository](https://github.com/zKiwiko/vscode-gpc-extension).
 
-# Disclaimer
+## License
+This project is licensed under the Apache License 2.0 - see the [LICENSE](LICENSE) file for details.
 
+## Acknowledgments
 Any trademarks related to this repository are owned by their respective owners.

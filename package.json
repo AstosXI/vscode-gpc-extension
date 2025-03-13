@@ -3,11 +3,11 @@
   "displayName": "GPC Scripting",
   "description": "GPC Compatibility",
   "publisher": "zKiwiko",
-  "version": "1.0.3",
+  "version": "1.1.0",
   "icon": "images/cronus.png",
   "repository": {
     "type": "git",
-    "url" : "https://github.com/zKiwiko/vscode-gpc-extension.git"
+    "url": "https://github.com/zKiwiko/vscode-gpc-extension.git"
   },
   "gallerBanner": {
     "color": "#000000",
@@ -16,16 +16,22 @@
     "light": "./images/cronus.png"
   },
   "engines": {
-    "vscode": "^1.90.0"
+    "vscode": "^1.98.0"
   },
   "categories": [
     "Programming Languages"
   ],
   "main": "./client/src/extension.js",
   "activationEvents": [
-    "onLanguage:gpc"
+    "onstartupFinished"
   ],
   "contributes": {
+    "commands": [
+      {
+        "command": "extension.build",
+        "title": "GPC: Build project with Toriel"
+      }
+    ],
     "languages": [
       {
         "id": "gpc",
@@ -47,19 +53,32 @@
       }
     ]
   },
-  "scripts": {
-    "vscode:prepublish": "npm install"
-  },
+
   "dependencies": {
-    "vscode-languageclient": "^8.1.0"
+    "vscode-languageclient": "^9.0.1"
   },
   "devDependencies": {
-    "@types/node": "^16.11.7",
-    "@types/vscode": "^1.90.0",
-    "@vscode/test-electron": "^2.3.8"
+    "@types/node": "^22.13.10",
+    "@types/vscode": "^1.98.0",
+    "@vscode/test-electron": "^2.4.1"
   },
+  "runtimeDependencies": [
+    {
+      "platform": [
+        "win32",
+        "linux",
+        "darwin"
+      ],
+      "binaries": {
+        "win32": "./bin/window/toriel-bt.exe",
+        "linux": "./bin/linux/toriel-bt-linux",
+        "darwin": "./bin/macos/toriel-bt-macos"
+      }
+    }
+  ],
   "workspaces": [
     "client",
     "server"
-  ]
+  ],
+  "type": "module"
 }
