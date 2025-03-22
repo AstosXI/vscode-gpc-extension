@@ -81,8 +81,8 @@ function parseVariables(document) {
         const content = match[3] || "";
 
         const values = content
-            .replace(/\/\*[\s\S]*?\*\//g, "") // Remove block comments
-            .replace(/\/\/[^\n]*/g, "") // Remove line comments
+            .replace(/\/\*[\s\S]*?\*\//g, "")
+            .replace(/\/\/[^\n]*/g, "")
             .split(",")
             .map((item) => item.trim());
 
@@ -104,8 +104,8 @@ function parseVariables(document) {
         const cleanRows = rows.map((row) => {
             const values = row
                 .slice(1, -1)
-                .replace(/\/\*[\s\S]*?\*\//g, "") // Remove block comments
-                .replace(/\/\/[^\n]*/g, "") // Remove line comments
+                .replace(/\/\*[\s\S]*?\*\//g, "")
+                .replace(/\/\/[^\n]*/g, "")
                 .split(",")
                 .map((v) => v.trim())
                 .filter(Boolean);
@@ -125,8 +125,8 @@ function parseVariables(document) {
     while ((match = GPC.Regex.ENUM.exec(text)) !== null) {
         const enumContent = match[0]
             .slice(match[0].indexOf("{") + 1, match[0].lastIndexOf("}"))
-            .replace(/\/\*[\s\S]*?\*\//g, "") // Remove block comments
-            .replace(/\/\/[^\n]*/g, ""); // Remove line comments
+            .replace(/\/\*[\s\S]*?\*\//g, "")
+            .replace(/\/\/[^\n]*/g, "");
 
         const variables = enumContent
             .split(",")
@@ -687,7 +687,6 @@ connection.onDocumentSymbol((params) => {
 
     const symbols = [];
 
-    // Add variable symbols
     for (const [varName, info] of variableDeclarations) {
         symbols.push({
             name: varName,
@@ -709,7 +708,6 @@ connection.onDocumentSymbol((params) => {
         });
     }
 
-    // Add function symbols
     for (const [funcName, info] of functionDeclarations) {
         symbols.push({
             name: funcName,
@@ -731,7 +729,6 @@ connection.onDocumentSymbol((params) => {
         });
     }
 
-    // Add combo symbols
     for (const [comboName, info] of comboDeclarations) {
         symbols.push({
             name: comboName,
