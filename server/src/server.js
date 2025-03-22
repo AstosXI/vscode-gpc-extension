@@ -8,9 +8,11 @@ const {
     InsertTextFormat,
     MarkupKind,
     DiagnosticSeverity,
-} = require('vscode-languageserver/node');
+} = require("vscode-languageserver/node");
 
-const { TextDocument } = require('vscode-languageserver-textdocument');
+const { TextDocument } = require("vscode-languageserver-textdocument");
+const { GPC } = require("./GPC");
+const Snippets = require("./Snippets");
 const connection = createConnection(ProposedFeatures.all);
 const documents = new TextDocuments(TextDocument);
 
@@ -18,1156 +20,22 @@ const variableDeclarations = new Map();
 const functionDeclarations = new Map();
 const comboDeclarations = new Map();
 
-class GPC {
-    static Regex = {
-        NON_ARRAY: /\b(define|int)\b\s+(\w+)\s*(?:=\s*([^;]+)|(\[\s*\d*\s*\]))?/g,        
-        ARRAY_1D:  /const\s+\b(int|int8|int16|int32|string|uint8|uint16|uint32)\b\s+(\w+)\s*\[\s*\w*\s*\]\s*=\s*\{\s*([^}]*)\s*\};/g,
-        ARRAY_2D:  /const\s+\b(int|int8|int16|int32|string|uint8|uint16|uint32)\b\s+(\w+)\s*\[\s*\w*\]\s*\[\s*\w*\]\s*=\s*\{\s*((?:\{[^}]*\},?\s*)+)\s*\};/g,
-        ENUM:      /enum\s*(?:\/\*[\s\S]*?\*\/|\s*\/\/[^\n]*\n)?\s*\{[\s\S]*?\}/g,
-        FUNCTION:  /\bfunction\s+(\w+)\s*\(([^)]*)\)\s*\{?/g,
-        FUNCTION_CALL: /(\w+)\s*\((.*?)\)/g,
-        COMBO:     /\bcombo\s+(\w+)\s*\{/g,
-        INCLUDE:   /@include\s*\"([^"]+)\"/g,
-        DECIMAL:   /(?<![a-zA-Z0-9_])(?<!")\d+\.\d+(?![a-zA-Z0-9_])(?<!")/g,
-        UNKNOWN:   /(#|@)+(?!include)/g,
-        SINGLE_QUOTE_STRING: /'[^']*'/g
-    };
-
-    static Constants = Object.freeze(new Map([
-        ['ASCII_SPACE', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['ASCII_EXCLAMATION', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['ASCII_DOUBLE_QUOTE', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['ASCII_QUOTE', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['ASCII_POUND', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['ASCII_DOLLAR', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['ASCII_PERCENT', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['ASCII_AMPERSAND', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['ASCII_AND', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['ASCII_SINGLE_QUOTE', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['ASCII_APOSTROPHE', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['ASCII_LEFT_PARENTHESIS', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['ASCII_OPEN_PARENTHESIS', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['ASCII_RIGHT_PARENTHESIS', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['ASCII_CLOSE_PARENTHESIS', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['ASCII_ASTERISK', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['ASCII_PLUS', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['ASCII_COMMA', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['ASCII_MINUS', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['ASCII_PERIOD', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['ASCII_SLASH', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['ASCII_DIGIT0', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['ASCII_DIGIT1', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['ASCII_DIGIT2', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['ASCII_DIGIT3', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['ASCII_DIGIT4', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['ASCII_DIGIT5', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['ASCII_DIGIT6', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['ASCII_DIGIT7', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['ASCII_DIGIT8', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['ASCII_DIGIT9', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['ASCII_COLON', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['ASCII_SEMICOLON', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['ASCII_LESS_THAN', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['ASCII_EQUAL', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['ASCII_GREATER_THAN', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['ASCII_QUESTION', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['ASCII_AT', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['ASCII_UPPER_A', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['ASCII_UPPER_B', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['ASCII_UPPER_C', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['ASCII_UPPER_D', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['ASCII_UPPER_E', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['ASCII_UPPER_F', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['ASCII_UPPER_G', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['ASCII_UPPER_H', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['ASCII_UPPER_I', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['ASCII_UPPER_J', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['ASCII_UPPER_K', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['ASCII_UPPER_L', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['ASCII_UPPER_M', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['ASCII_UPPER_N', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['ASCII_UPPER_O', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['ASCII_UPPER_P', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['ASCII_UPPER_Q', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['ASCII_UPPER_R', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['ASCII_UPPER_S', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['ASCII_UPPER_T', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['ASCII_UPPER_U', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['ASCII_UPPER_V', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['ASCII_UPPER_W', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['ASCII_UPPER_X', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['ASCII_UPPER_Y', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['ASCII_UPPER_Z', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['ASCII_LEFT_BRACKET', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['ASCII_LEFT_SQUARE_BRACKET', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['ASCII_OPEN_SQUARE_BRACKET', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['ASCII_OPEN_BRACKET', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['ASCII_BACKSLASH', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['ASCII_RIGHT_BRACKET', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['ASCII_RIGHT_SQUARE_BRACKET', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['ASCII_CLOSE_BRACKET', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['ASCII_CARAT', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['ASCII_UNDERSCORE', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['ASCII_GRAVE', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['ASCII_BACK_QUOTE', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['ASCII_LOWER_A', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['ASCII_LOWER_B', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['ASCII_LOWER_C', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['ASCII_LOWER_D', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['ASCII_LOWER_E', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['ASCII_LOWER_F', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['ASCII_LOWER_G', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['ASCII_LOWER_H', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['ASCII_LOWER_I', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['ASCII_LOWER_J', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['ASCII_LOWER_K', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['ASCII_LOWER_L', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['ASCII_LOWER_M', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['ASCII_LOWER_N', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['ASCII_LOWER_O', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['ASCII_LOWER_P', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['ASCII_LOWER_Q', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['ASCII_LOWER_R', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['ASCII_LOWER_S', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['ASCII_LOWER_T', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['ASCII_LOWER_U', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['ASCII_LOWER_V', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['ASCII_LOWER_W', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['ASCII_LOWER_X', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['ASCII_LOWER_Y', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['ASCII_LOWER_Z', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['ASCII_LEFT_BRACE', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['ASCII_OPEN_BRACE', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['ASCII_LEFT_CURLY_BRACE', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['ASCII_OPEN_CURLY_BRACE', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['ASCII_LEFT_CURLY_BRACKET', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['ASCII_VERTICAL_BAR', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['ASCII_BAR', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['ASCII_PIPE', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['ASCII_RIGHT_BRACE', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['ASCII_CLOSE_BRACE', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['ASCII_RIGHT_CURLY_BRACE', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['ASCII_CLOSE_CURLY_BRACE', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['ASCII_RIGHT_CURLY_BRACKET', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['ASCII_TILDE', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['ASCII_PS_CROSS', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['ASCII_PS_CIRCLE', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['ASCII_PS_SQUARE', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['ASCII_PS_TRIANGLE', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['ASCII_DPAD_UP', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['ASCII_DPAD_DOWN', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['ASCII_DPAD_LEFT', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['ASCII_DPAD_RIGHT', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['ASCII_XB_VIEW', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['ASCII_XB_MENU', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['POLAR_RS', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['POLAR_LS', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['POLAR_GHOST', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['POLAR_RX', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['POLAR_RY', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['POLAR_LX', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['POLAR_LY', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['ANALOG_RX', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['ANALOG_RY', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['ANALOG_LX', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['ANALOG_LY', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['ANALOG_GHOSTX', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['ANALOG_GHOSTY', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['POLAR_RADIUS', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['POLAR_ANGLE', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['MK_GENERAL', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['MK_ADS_MAP', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['MK_ADS_GAIN_RATIO', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['MK_SENSITIVITY', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['MK_SMOOTHNESS', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['MK_ACCELERATION', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['MK_DEPRECATED', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['MK_STICKIZE', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['MK_DEADZONE', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['MK_DZSHAPE', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['MK_WALK_MAP', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['MK_AXIS_X', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['MK_AXIS_Y', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['PS3_PS', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['PS3_SELECT', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['PS3_START', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['PS3_R1', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['PS3_R2', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['PS3_R3', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['PS3_L1', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['PS3_L2', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['PS3_L3', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['PS3_RX', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['PS3_RY', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['PS3_LX', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['PS3_LY', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['PS3_UP', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['PS3_DOWN', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['PS3_LEFT', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['PS3_RIGHT', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['PS3_TRIANGLE', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['PS3_CIRCLE', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['PS3_CROSS', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['PS3_SQUARE', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['PS3_ACCX', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['PS3_ACCY', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['PS3_ACCZ', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['PS3_GYRO', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['PS4_PS', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['PS4_SHARE', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['PS4_OPTIONS', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['PS4_R1', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['PS4_R2', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['PS4_R3', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['PS4_L1', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['PS4_L2', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['PS4_L3', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['PS4_RX', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['PS4_RY', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['PS4_LX', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['PS4_LY', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['PS4_UP', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['PS4_DOWN', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['PS4_LEFT', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['PS4_RIGHT', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['PS4_TRIANGLE', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['PS4_CIRCLE', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['PS4_CROSS', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['PS4_SQUARE', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['PS4_ACCX', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['PS4_ACCY', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['PS4_ACCZ', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['PS4_GYROX', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['PS4_GYROY', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['PS4_GYROZ', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['PS4_TOUCH', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['PS4_FINGER1X', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['PS4_FINGER1Y', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['PS4_FINGER1', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['PS4_FINGER2X', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['PS4_FINGER2Y', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['PS4_FINGER2', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['PS5_PS', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['PS5_SHARE', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['PS5_OPTIONS', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['PS5_R1', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['PS5_R2', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['PS5_R3', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['PS5_L1', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['PS5_L2', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['PS5_L3', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['PS5_RX', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['PS5_RY', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['PS5_LX', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['PS5_LY', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['PS5_UP', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['PS5_DOWN', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['PS5_LEFT', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['PS5_RIGHT', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['PS5_TRIANGLE', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['PS5_CIRCLE', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['PS5_CROSS', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['PS5_SQUARE', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['PS5_ACCX', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['PS5_ACCY', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['PS5_ACCZ', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['PS5_GYROX', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['PS5_GYROY', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['PS5_GYROZ', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['PS5_TOUCH', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['PS5_FINGER1X', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['PS5_FINGER1Y', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['PS5_FINGER1', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['PS5_FINGER2X', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['PS5_FINGER2Y', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['PS5_FINGER2', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['PS5_MUTE', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['WII_HOME', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['WII_MINUS', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['WII_PLUS', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['WII_RT', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['WII_ZR', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['WII_ONE', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['WII_C', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['WII_LT', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['WII_Z', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['WII_ZL', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['WII_TWO', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['WII_RX', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['WII_RY', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['WII_LX', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['WII_LY', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['WII_NX', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['WII_NY', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['WII_UP', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['WII_DOWN', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['WII_LEFT', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['WII_RIGHT', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['WII_X', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['WII_B', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['WII_A', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['WII_Y', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['WII_ACCX', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['WII_ACCY', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['WII_ACCZ', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['WII_ACCNX', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['WII_ACCNY', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['WII_ACCNZ', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['WII_IRX', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['WII_IRY', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['SWI_HOME', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['SWI_MINUS', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['SWI_PLUS', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['SWI_R', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['SWI_ZR', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['SWI_R3', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['SWI_L', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['SWI_ZL', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['SWI_L3', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['SWI_RX', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['SWI_LX', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['SWI_RY', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['SWI_LY', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['SWI_UP', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['SWI_DOWN', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['SWI_LEFT', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['SWI_RIGHT', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['SWI_X', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['SWI_A', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['SWI_B', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['SWI_Y', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['SWI_ACCX', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['SWI_ACCY', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['SWI_ACCZ', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['SWI_GYROX', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['SWI_GYROY', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['SWI_GYROZ', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['SWI_CAPTURE', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['XB1_XBOX', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['XB1_GUIDE', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['XB1_VIEW', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['XB1_MENU', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['XB1_RB', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['XB1_RT', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['XB1_RS', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['XB1_LB', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['XB1_LT', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['XB1_LS', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['XB1_RX', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['XB1_RY', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['XB1_LX', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['XB1_LY', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['XB1_UP', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['XB1_DOWN', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['XB1_LEFT', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['XB1_RIGHT', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['XB1_Y', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['XB1_B', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['XB1_A', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['XB1_X', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['XB1_SHARE', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['XB1_SYNC', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['XB1_PR1', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['XB1_PR2', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['XB1_PL1', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['XB1_PL2', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['XB360_XBOX', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['XB360_BACK', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['XB360_START', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['XB360_RB', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['XB360_RT', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['XB360_RS', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['XB360_LB', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['XB360_LT', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['XB360_LS', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['XB360_RX', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['XB360_RY', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['XB360_LX', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['XB360_LY', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['XB360_UP', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['XB360_DOWN', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['XB360_LEFT', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['XB360_RIGHT', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['XB360_Y', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['XB360_B', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['XB360_A', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['XB360_X', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['DF_PS', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['DF_SELECT', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['DF_START', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['DF_RPADDLE', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['DF_R2', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['DF_R3', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['DF_LPADDLE', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['DF_L2', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['DF_L3', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['DF_GAS', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['DF_STEERING', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['DF_BRAKE', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['DF_UP', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['DF_DOWN', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['DF_LEFT', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['DF_RIGHT', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['DF_TRIANGLE', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['DF_CIRCLE', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['DF_CROSS', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['DF_SQUARE', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['DFGT_PS', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['DFGT_SELECT', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['DFGT_START', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['DFGT_RPADDLE', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['DFGT_R2', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['DFGT_R3', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['DFGT_LPADDLE', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['DFGT_L2', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['DFGT_L3', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['DFGT_GAS', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['DFGT_STEERING', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['DFGT_BRAKE', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['DFGT_UP', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['DFGT_DOWN', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['DFGT_LEFT', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['DFGT_RIGHT', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['DFGT_TRIANGLE', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['DFGT_CIRCLE', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['DFGT_CROSS', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['DFGT_SQUARE', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['DFGT_UP_ARROW', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['DFGT_DOWN_ARROW', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['DFGT_DIAL_CCW', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['DFGT_DIAL_CW', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['DFGT_DIAL', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['DFPRO_PS', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['DFPRO_SELECT', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['DFPRO_START', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['DFPRO_RPADDLE', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['DFPRO_R2', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['DFPRO_R3', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['DFPRO_LPADDLE', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['DFPRO_L2', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['DFPRO_L3', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['DFPRO_GAS', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['DFPRO_STEERING', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['DFPRO_BRAKE', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['DFPRO_UP', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['DFPRO_DOWN', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['DFPRO_LEFT', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['DFPRO_RIGHT', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['DFPRO_TRIANGLE', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['DFPRO_CIRCLE', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['DFPRO_CROSS', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['DFPRO_SQUARE', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['G25_PS', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['G25_SELECT', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['G25_START', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['G25_RPADDLE', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['G25_R2', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['G25_R3', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['G25_LPADDLE', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['G25_L2', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['G25_L3', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['G25_GAS', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['G25_CLUTCH', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['G25_STEERING', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['G25_BRAKE', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['G25_UP', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['G25_DOWN', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['G25_LEFT', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['G25_RIGHT', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['G25_TRIANGLE', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['G25_CIRCLE', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['G25_CROSS', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['G25_SQUARE', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['G25_SHIFT', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['G27_PS', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['G27_SELECT', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['G27_START', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['G27_RPADDLE', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['G27_R2', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['G27_R3', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['G27_LPADDLE', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['G27_L2', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['G27_L3', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['G27_GAS', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['G27_CLUTCH', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['G27_STEERING', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['G27_BRAKE', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['G27_UP', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['G27_DOWN', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['G27_LEFT', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['G27_RIGHT', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['G27_TRIANGLE', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['G27_CIRCLE', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['G27_CROSS', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['G27_SQUARE', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['G27_SHIFT', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['G27_L4', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['G27_L5', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['G27_R4', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['G27_R5', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['G29_PS', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['G29_SELECT', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['G29_START', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['G29_RPADDLE', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['G29_R2', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['G29_R3', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['G29_LPADDLE', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['G29_L2', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['G29_L3', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['G29_GAS', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['G29_CLUTCH', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['G29_STEERING', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['G29_BRAKE', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['G29_UP', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['G29_DOWN', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['G29_LEFT', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['G29_RIGHT', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['G29_TRIANGLE', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['G29_CIRCLE', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['G29_CROSS', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['G29_SQUARE', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['G29_SHIFT', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['G29_UP_ARROW', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['G29_DOWN_ARROW', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['G29_DIAL_CCW', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['G29_DIAL_CW', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['G29_DIAL', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['KEY_A', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['KEY_B', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['KEY_C', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['KEY_D', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['KEY_E', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['KEY_F', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['KEY_G', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['KEY_H', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['KEY_I', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['KEY_J', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['KEY_K', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['KEY_L', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['KEY_M', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['KEY_N', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['KEY_O', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['KEY_P', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['KEY_Q', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['KEY_R', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['KEY_S', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['KEY_T', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['KEY_U', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['KEY_V', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['KEY_W', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['KEY_X', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['KEY_Y', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['KEY_Z', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['KEY_1', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['KEY_2', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['KEY_3', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['KEY_4', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['KEY_5', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['KEY_6', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['KEY_7', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['KEY_8', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['KEY_9', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['KEY_0', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['KEY_ENTER', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['KEY_ESC', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['KEY_BACKSPACE', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['KEY_TAB', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['KEY_SPACE', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['KEY_MINUS', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['KEY_EQUAL', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['KEY_LEFTBRACE', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['KEY_RIGHTBRACE', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['KEY_BACKSLASH', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['KEY_HASHTILDE', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['KEY_SEMICOLON', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['KEY_APOSTROPHE', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['KEY_GRAVE', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['KEY_COMMA', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['KEY_DOT', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['KEY_SLASH', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['KEY_CAPSLOCK', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['KEY_F1', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['KEY_F2', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['KEY_F3', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['KEY_F4', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['KEY_F5', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['KEY_F6', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['KEY_F7', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['KEY_F8', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['KEY_F9', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['KEY_F10', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['KEY_F11', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['KEY_F12', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['KEY_SYSRQ', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['KEY_SCROLLLOCK', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['KEY_PAUSE', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['KEY_INSERT', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['KEY_HOME', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['KEY_PAGEUP', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['KEY_DELETE', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['KEY_END', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['KEY_PAGEDOWN', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['KEY_RIGHT', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['KEY_LEFT', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['KEY_DOWN', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['KEY_UP', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['KEY_NUMLOCK', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['KEY_KPSLASH', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['KEY_KPASTERISK', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['KEY_KPMINUS', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['KEY_KPPLUS', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['KEY_KPENTER', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['KEY_KP1', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['KEY_KP2', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['KEY_KP3', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['KEY_KP4', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['KEY_KP5', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['KEY_KP6', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['KEY_KP7', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['KEY_KP8', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['KEY_KP9', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['KEY_KP0', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['KEY_NUM1', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['KEY_NUM2', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['KEY_NUM3', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['KEY_NUM4', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['KEY_NUM5', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['KEY_NUM6', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['KEY_NUM7', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['KEY_NUM8', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['KEY_NUM9', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['KEY_NUM0', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['KEY_KPDOT', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['KEY_102ND', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['KEY_COMPOSE', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['KEY_POWER', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['KEY_KPEQUAL', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['KEY_F13', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['KEY_F14', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['KEY_F15', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['KEY_F16', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['KEY_F17', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['KEY_F18', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['KEY_F19', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['KEY_F20', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['KEY_F21', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['KEY_F22', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['KEY_F23', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['KEY_F24', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['KEY_OPEN', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['KEY_HELP', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['KEY_PROPS', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['KEY_FRONT', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['KEY_STOP', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['KEY_AGAIN', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['KEY_UNDO', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['KEY_CUT', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['KEY_COPY', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['KEY_PASTE', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['KEY_FIND', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['KEY_MUTE', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['KEY_VOLUMEUP', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['KEY_VOLUMEDOWN', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['KEY_KPCOMMA', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['KEY_RO', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['KEY_KATAKANAHIRAGANA', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['KEY_YEN', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['KEY_HENKAN', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['KEY_MUHENKAN', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['KEY_KPJPCOMMA', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['KEY_HANGEUL', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['KEY_HANJA', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['KEY_KATAKANA', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['KEY_HIRAGANA', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['KEY_ZENKAKUHANKAKU', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['KEY_KPLEFTPAREN', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['KEY_KPRIGHTPAREN', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['KEY_LEFTCTRL', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['KEY_LEFTSHIFT', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['KEY_LEFTALT', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['KEY_LEFTMETA', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['KEY_RIGHTCTRL', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['KEY_RIGHTSHIFT', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['KEY_RIGHTALT', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['KEY_RIGHTMETA', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['KEY_MEDIA_PLAYPAUSE', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['KEY_MEDIA_STOPCD', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['KEY_MEDIA_PREVIOUSSONG', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['KEY_MEDIA_NEXTSONG', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['KEY_MEDIA_EJECTCD', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['KEY_MEDIA_VOLUMEUP', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['KEY_MEDIA_VOLUMEDOWN', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['KEY_MEDIA_MUTE', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['KEY_MEDIA_WWW', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['KEY_MEDIA_BACK', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['KEY_MEDIA_FORWARD', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['KEY_MEDIA_STOP', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['KEY_MEDIA_FIND', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['KEY_MEDIA_SCROLLUP', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['KEY_MEDIA_SCROLLDOWN', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['KEY_MEDIA_EDIT', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['KEY_MEDIA_SLEEP', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['KEY_MEDIA_COFFEE', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['KEY_MEDIA_REFRESH', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['KEY_MEDIA_CALC', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['MOD_LCTRL', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['MOD_LSHIFT', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['MOD_LALT', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['MOD_LGUI', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['MOD_RCTRL', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['MOD_RSHIFT', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['MOD_RALT', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['MOD_RGUI', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['TRACE_1', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['TRACE_2', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['TRACE_3', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['TRACE_4', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['TRACE_5', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['TRACE_6', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['LED_NONE', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['LED_1', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['LED_2', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['LED_3', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['LED_4', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['LED_5', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['LED_6', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['LEDMASK_OFF', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['LEDMASK_L1', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['LEDMASK_L2', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['LEDMASK_L3', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['LEDMASK_L4', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['LEDMASK_R1', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['LEDMASK_R2', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['LEDMASK_R3', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['LEDMASK_R4', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['LEDMASKD_L1', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['LEDMASKD_L2', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['LEDMASKD_L3', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['LEDMASKD_L4', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['LEDMASKD_R1', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['LEDMASKD_R2', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['LEDMASKD_R3', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['LEDMASKD_R4', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['PS4_GREEN', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['PS4_RED', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['PS4_BLUE', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['DS4_GREEN', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['DS4_RED', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['DS4_BLUE', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['PLAYER_1', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['PLAYER_2', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['PLAYER_3', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['PLAYER_4', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['RED_1', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['GREEN_1', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['BLUE_1', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['RED_2', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['GREEN_2', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['BLUE_2', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['RGB1', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['RGB2', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['RGB3', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['RGB4', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['RGB5', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['RGB6', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['RGB7', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['RGB8', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['OLED_WHITE', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['OLED_BLACK', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['OLED_WIDTH', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['OLED_HEIGHT', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['OLED_FONT_SMALL', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['OLED_FONT_MEDIUM', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['OLED_FONT_LARGE', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['OLED_FONT_SMALL_WIDTH', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['OLED_FONT_MEDIUM_WIDTH', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['OLED_FONT_LARGE_WIDTH', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['OLED_FONT_SMALL_HEIGHT', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['OLED_FONT_MEDIUM_HEIGHT', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['OLED_FONT_LARGE_HEIGHT', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['OLED_CROSS', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['OLED_CIRCLE', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['OLED_SQUARE', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['OLED_TRIANGLE', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['OLED_UP', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['OLED_DOWN', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['OLED_LEFT', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['OLED_RIGHT', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['OLED_VIEW', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['OLED_MENU', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['ALL_REMAPS', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['NOT_USE', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['MK_UNUSED', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['DZ_CIRCLE', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['BITMASK_1', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['BITMASK_2', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['BITMASK_3', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['BITMASK_4', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['BITMASK_5', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['BITMASK_6', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['BITMASK_7', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['BITMASK_8', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['BITMASK_9', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['BITMASK_10', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['BITMASK_11', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['BITMASK_12', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['BITMASK_13', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['BITMASK_14', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['BITMASK_15', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['BITMASK_16', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['BITMASK_17', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['BITMASK_18', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['BITMASK_19', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['BITMASK_20', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['BITMASK_21', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['BITMASK_22', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['BITMASK_23', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['BITMASK_24', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['BITMASK_25', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['BITMASK_26', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['BITMASK_27', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['BITMASK_28', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['BITMASK_29', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['BITMASK_30', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['BITMASK_31', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['BITMASK_32', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['PIO_NONE', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['PIO_AUTO', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['PIO_PS3', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['PIO_XB360', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['PIO_WII', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['PIO_PS4', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['PIO_XB1', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['PIO_SWITCH', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['PIO_PS5', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['PS4T_P1', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['PS4T_P1X', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['PS4T_P1Y', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['PS4T_P2', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['PS4T_P2X', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['PS4T_P2Y', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['PRODUCTID', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['ISSWAPPED', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['CPU_USAGE', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['PENDING_CONFIG', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['ACTIVE_CONFIG', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['UNSUPPORTED', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['STRIKEPACK_XB1', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['STRIKEPACK_XB1FPS', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['STRIKEPACK_XB1ELI', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['STRIKEPACK_PS4FPS', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['SWITCH_UP', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['MODPOD', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['CRONUS_ZEN', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['PS5_ADT_MODE', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['PS5_ADT_START', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['PS5_ADT_FORCE1', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['PS5_ADT_FORCE2', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['PS5_ADT_STRENGTH_LOW', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['PS5_ADT_STRENGTH_MID', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['PS5_ADT_STRENGTH_HIGH', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['PS5_ADT_UNK1', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['PS5_ADT_UNK2', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['PS5_ADT_FREQ', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['PS5_ADT_UNK3', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['PS5_ADT_NR', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['PS5_ADT_CR', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['PS5_ADT_SR', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['PS5_ADT_EF1', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['PS5_ADT_EF2', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['PS5_ADT_OFF', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['PS5_ADT_NO_RES1', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['PS5_ADT_NO_RES2', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['PS5_ADT_HAS_RES1', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['PS5_ADT_HAS_RES2', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['PS5_HAPTICS_L', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['PS5_HAPTICS_R', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['PVAR_1', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['PVAR_2', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['PVAR_3', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['PVAR_4', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['PVAR_5', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['PVAR_6', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['PVAR_7', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['PVAR_8', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['PVAR_9', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['PVAR_10', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['PVAR_11', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['PVAR_12', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['PVAR_13', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['PVAR_14', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['PVAR_15', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['PVAR_16', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['SPVAR_1', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['SPVAR_2', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['SPVAR_3', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['SPVAR_4', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['SPVAR_5', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['SPVAR_6', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['SPVAR_7', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['SPVAR_8', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['SPVAR_9', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['SPVAR_10', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['SPVAR_11', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['SPVAR_12', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['SPVAR_13', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['SPVAR_14', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['SPVAR_15', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['SPVAR_16', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['SPVAR_17', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['SPVAR_18', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['SPVAR_19', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['SPVAR_20', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['SPVAR_21', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['SPVAR_22', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['SPVAR_23', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['SPVAR_24', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['SPVAR_25', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['SPVAR_26', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['SPVAR_27', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['SPVAR_28', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['SPVAR_29', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['SPVAR_30', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['SPVAR_31', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['SPVAR_32', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['SPVAR_33', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['SPVAR_34', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['SPVAR_35', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['SPVAR_36', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['SPVAR_37', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['SPVAR_38', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['SPVAR_39', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['SPVAR_40', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['SPVAR_41', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['SPVAR_42', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['SPVAR_43', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['SPVAR_44', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['SPVAR_45', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['SPVAR_46', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['SPVAR_47', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['SPVAR_48', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['SPVAR_49', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['SPVAR_50', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['SPVAR_51', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['SPVAR_52', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['SPVAR_53', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['SPVAR_54', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['SPVAR_55', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['SPVAR_56', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['SPVAR_57', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['SPVAR_58', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['SPVAR_59', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['SPVAR_60', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['SPVAR_61', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['SPVAR_62', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['SPVAR_63', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['SPVAR_64', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['RUMBLE_A', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['RUMBLE_B', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['RUMBLE_RT', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-        ['RUMBLE_LT', { kind: CompletionItemKind.Constant, detail: '', documentation: '' }],
-    ]))
-
-    static DataTypes = Object.freeze(new Map([
-        ['int', { kind: CompletionItemKind.Keyword, detail: 'Signed 32-bit integer. \n(-2,147,483,648 to 2,147,483,647)', documentation: ''}],
-        ['int8', { kind: CompletionItemKind.Keyword, detail: 'Signed 8-bit integer. \n(-128 to 127)', documentation: ''}],
-        ['int16', { kind: CompletionItemKind.Keyword, detail: 'Signed 16-bit integer.\n(-32,768 to 32,767)', documentation: ''}],
-        ['int32', { kind: CompletionItemKind.Keyword, detail: 'Signed 32-bit integer.\n(-2,147,483,648 to 2,147,483,647)', documentation: ''}],
-        ['string', { kind: CompletionItemKind.Keyword, detail: 'String of text.', documentation: ''}],
-        ['uint8', { kind: CompletionItemKind.Keyword, detail: 'Unsigned 8-bit integer.\n(0 to 255)', documentation: ''}],
-        ['uint16', { kind: CompletionItemKind.Keyword, detail: 'Unsigned 16-bit integer.\n(0 to 65,535)', documentation: ''}],
-        ['uint32', { kind: CompletionItemKind.Keyword, detail: 'Unsigned 32-bit integer.\n(0 to 4,294,967,295)', documentation: ''}],    
-        ['data', { kind: CompletionItemKind.Keyword, detail: '', documentation:''}],
-        ['image', { kind: CompletionItemKind.Keyword, detail: '', documentation: ''}]
-    ]));
-
-    static Keywords = Object.freeze(new Map([
-        ['if', { kind: CompletionItemKind.Keyword, detail: '', documentation: '' }],
-        ['while', { kind: CompletionItemKind.Keyword, detail: '', documentation: ''}],
-        ['function', { kind: CompletionItemKind.Keyword, detail: '', documentation: '' }],
-        ['else', { kind: CompletionItemKind.Keyword, detail: '', documentation: '' }],
-        ['switch', { kind: CompletionItemKind.Keyword, detail: '', documentation: '' }],
-        ['case', { kind: CompletionItemKind.Keyword, detail: '', documentation: '' }],
-        ['init', { kind: CompletionItemKind.Keyword, detail: '', documentation: '' }],
-        ['main', { kind: CompletionItemKind.Keyword, detail: '', documentation: '' }],
-        ['for', { kind: CompletionItemKind.Keyword, detail: '', documentation: '' }],
-        ['return', { kind: CompletionItemKind.Keyword, detail: '', documentation: '' }],
-        ['default', { kind: CompletionItemKind.Keyword, detail: '', documentation: '' }],
-        ['break', { kind: CompletionItemKind.Keyword, detail: '', documentation: '' }],
-        ['enum', { kind: CompletionItemKind.Keyword, detail: '', documentation: '' }],
-        ['define', { kind: CompletionItemKind.Keyword, detail: '', documentation: '' }],
-        ['const', { kind: CompletionItemKind.Keyword, detail: '', documentation: ''}],
-    ]));
-
-    static BuiltInFunctions = Object.freeze(new Map([
-        ['duint8',               { params: 1, kind: CompletionItemKind.Function, detail: '', documentation: ''}],
-        ['duint16',              { params: 1, kind: CompletionItemKind.Function, detail: '', documentation: ''}],
-        ['dint32',               { params: 1, kind: CompletionItemKind.Function, detail: '', documentation: ''}],
-        ['dint8',                { params: 1, kind: CompletionItemKind.Function, detail: '', documentation: ''}],
-        ['dint16',               { params: 1, kind: CompletionItemKind.Function, detail: '', documentation: ''}],
-        ['get_val',              { params: 1, kind: CompletionItemKind.Function, detail: '', documentation: ''}],
-        ['get_lval',             { params: 1, kind: CompletionItemKind.Function, detail: '', documentation: ''}],
-        ['get_ptime',            { params: 1, kind: CompletionItemKind.Function, detail: '', documentation: ''}],
-        ['get_controller',       { params: 0, kind: CompletionItemKind.Function, detail: '', documentation: ''}],
-        ['get_battery',          { params: 0, kind: CompletionItemKind.Function, detail: '', documentation: ''}],
-        ['event_press',          { params: 1, kind: CompletionItemKind.Function, detail: '', documentation: ''}],
-        ['event_release',        { params: 1, kind: CompletionItemKind.Function, detail: '', documentation: ''}],
-        ['get_ival',             { params: 1, kind: CompletionItemKind.Function, detail: '', documentation: ''}],
-        ['get_brtime',           { params: 1, kind: CompletionItemKind.Function, detail: '', documentation: ''}],
-        ['swap',                 { params: 2, kind: CompletionItemKind.Function, detail: '', documentation: ''}],
-        ['block',                { params: 2, kind: CompletionItemKind.Function, detail: '', documentation: ''}],
-        ['sensitivity',          { params: 3, kind: CompletionItemKind.Function, detail: '', documentation: ''}],
-        ['deadzone',             { params: 4, kind: CompletionItemKind.Function, detail: '', documentation: ''}],
-        ['stickize',             { params: 3, kind: CompletionItemKind.Function, detail: '', documentation: ''}],
-        ['ps4_touchpad',         { params: 1, kind: CompletionItemKind.Function, detail: '', documentation: ''}],
-        ['ps4_set_touchpad',     { params: 2, kind: CompletionItemKind.Function, detail: '', documentation: ''}],
-        ['turn_off',             { params: 0, kind: CompletionItemKind.Function, detail: '', documentation: ''}],
-        ['wii_offscreen',        { params: 0, kind: CompletionItemKind.Function, detail: '', documentation: ''}],
-        ['get_adt',              { params: 2, kind: CompletionItemKind.Function, detail: '', documentation: ''}],
-        ['set_adt',              { params: 3, kind: CompletionItemKind.Function, detail: '', documentation: ''}],
-        ['adt_off',              { params: 0, kind: CompletionItemKind.Function, detail: '', documentation: ''}],
-        ['adt_cmp',              { params: 2, kind: CompletionItemKind.Function, detail: '', documentation: ''}],
-        ['addr',                 { params: 1, kind: CompletionItemKind.Function, detail: '', documentation: ''}],
-        ['get_rumble',           { params: 1, kind: CompletionItemKind.Function, detail: '', documentation: ''}],
-        ['set_rumble',           { params: 2, kind: CompletionItemKind.Function, detail: '', documentation: ''}],
-        ['block_rumble',         { params: 0, kind: CompletionItemKind.Function, detail: '', documentation: ''}],
-        ['reset_rumble',         { params: 0, kind: CompletionItemKind.Function, detail: '', documentation: ''}],
-        ['set_led',              { params: 2, kind: CompletionItemKind.Function, detail: '', documentation: ''}],
-        ['get_led',              { params: 1, kind: CompletionItemKind.Function, detail: '', documentation: ''}],
-        ['set_ledx',             { params: 2, kind: CompletionItemKind.Function, detail: '', documentation: ''}],
-        ['get_ledx',             { params: 0, kind: CompletionItemKind.Function, detail: '', documentation: ''}],
-        ['reset_leds',           { params: 0, kind: CompletionItemKind.Function, detail: '', documentation: ''}],
-        ['get_ps4_lbar',         { params: 1, kind: CompletionItemKind.Function, detail: '', documentation: ''}],
-        ['set_ps4_lbar',         { params: 3, kind: CompletionItemKind.Function, detail: '', documentation: ''}],
-        ['get_keyboard',         { params: 1, kind: CompletionItemKind.Function, detail: '', documentation: ''}],
-        ['get_modifiers',        { params: 1, kind: CompletionItemKind.Function, detail: '', documentation: ''}],
-        ['get_rtime',            { params: 0, kind: CompletionItemKind.Function, detail: '', documentation: ''}],
-        ['get_slot',             { params: 0, kind: CompletionItemKind.Function, detail: '', documentation: ''}],
-        ['load_slot',            { params: 1, kind: CompletionItemKind.Function, detail: '', documentation: ''}],
-        ['get_ctrlbutton',       { params: 0, kind: CompletionItemKind.Function, detail: '', documentation: ''}],
-        ['vm_tctrl',             { params: 1, kind: CompletionItemKind.Function, detail: '', documentation: ''}],
-        ['set_polar',            { params: 3, kind: CompletionItemKind.Function, detail: '', documentation: ''}],
-        ['set_rgb',              { params: 3, kind: CompletionItemKind.Function, detail: '', documentation: ''}],
-        ['set_hsb',              { params: 3, kind: CompletionItemKind.Function, detail: '', documentation: ''}],
-        ['clamp',                { params: 3, kind: CompletionItemKind.Function, detail: '', documentation: ''}],
-        ['get_polar',            { params: 2, kind: CompletionItemKind.Function, detail: '', documentation: ''}],
-        ['get_ipolar',           { params: 2, kind: CompletionItemKind.Function, detail: '', documentation: ''}],
-        ['remap',                { kind: CompletionItemKind.Function, detail: '', documentation: ''}],
-        ['unmap',                { kind: CompletionItemKind.Function, detail: '', documentation: ''}],
-        ['combo_run',            { params: 1, kind: CompletionItemKind.Function, detail: '', documentation: ''}],
-        ['combo_running',        { params: 1, kind: CompletionItemKind.Function, detail: '', documentation: ''}],
-        ['combo_stop',           { params: 1, kind: CompletionItemKind.Function, detail: '', documentation: ''}],
-        ['combo_restart',        { params: 1, kind: CompletionItemKind.Function, detail: '', documentation: ''}],
-        ['combo_suspend',        { params: 1, kind: CompletionItemKind.Function, detail: '', documentation: ''}],
-        ['combo_suspended',      { params: 1, kind: CompletionItemKind.Function, detail: '', documentation: ''}],
-        ['combo_current_step',   { params: 1, kind: CompletionItemKind.Function, detail: '', documentation: ''}],
-        ['combo_step_time_left', { params: 1, kind: CompletionItemKind.Function, detail: '', documentation: ''}],
-        ['combo_stop_all',    { params: 0, kind: CompletionItemKind.Function, detail: '', documentation: ''}],
-        ['combo_suspend_all', { params: 0, kind: CompletionItemKind.Function, detail: '', documentation: ''}],
-        ['combo_resume',      { params: 0, kind: CompletionItemKind.Function, detail: '', documentation: ''}],
-        ['combo_resume_all',  { params: 0, kind: CompletionItemKind.Function, detail: '', documentation: ''}],
-        ['wait',              { params: 1, kind: CompletionItemKind.Function, detail: '', documentation: ''}],
-        ['call',             { params: 1, kind: CompletionItemKind.Function, detail: '', documentation: ''}],
-        ['set_bit',          { params: 2, kind: CompletionItemKind.Function, detail: '', documentation: ''}],
-        ['clear_bit',        { params: 2, kind: CompletionItemKind.Function, detail: '', documentation: ''}],
-        ['test_bit',         { params: 2, kind: CompletionItemKind.Function, detail: '', documentation: ''}],
-        ['set_bits',         { params: 4, kind: CompletionItemKind.Function, detail: '', documentation: ''}],
-        ['get_bits',         { params: 3, kind: CompletionItemKind.Function, detail: '', documentation: ''}],
-        ['abs',              { params: 1, kind: CompletionItemKind.Function, detail: '', documentation: ''}],
-        ['inv',              { params: 1, kind: CompletionItemKind.Function, detail: '', documentation: ''}],
-        ['pow',              { params: 2, kind: CompletionItemKind.Function, detail: '', documentation: ''}],
-        ['isqrt',            { params: 1, kind: CompletionItemKind.Function, detail: '', documentation: ''}],
-        ['random',           { params: 2, kind: CompletionItemKind.Function, detail: '', documentation: ''}],
-        ['min',              { params: 2, kind: CompletionItemKind.Function, detail: '', documentation: ''}],
-        ['max',              { params: 2, kind: CompletionItemKind.Function, detail: '', documentation: ''}],
-        ['pixel_oled',       { params: 3, kind: CompletionItemKind.Function, detail: '', documentation: ''}],
-        ['line_oled',        { params: 6, kind: CompletionItemKind.Function, detail: '', documentation: ''}],
-        ['rect_oled',        { params: 6, kind: CompletionItemKind.Function, detail: '', documentation: ''}],
-        ['circle_oled',      { params: 5, kind: CompletionItemKind.Function, detail: '', documentation: ''}],
-        ['putc_oled',        { params: 2, kind: CompletionItemKind.Function, detail: '', documentation: ''}],
-        ['puts_oled',        { params: 5, kind: CompletionItemKind.Function, detail: '', documentation: ''}],
-        ['print',            { params: 5, kind: CompletionItemKind.Function, detail: '', documentation: ''}],
-        ['cls_oled',         { params: 1, kind: CompletionItemKind.Function, detail: '', documentation: ''}],
-        ['get_console',      { params: 0, kind: CompletionItemKind.Function, detail: '', documentation: ''}],
-        ['set_val',          { params: 2, kind: CompletionItemKind.Function, detail: '', documentation: ''}],
-        ['block_all_inputs', { params: 0, kind: CompletionItemKind.Function, detail: '', documentation: ''}],
-        ['get_info',         { params: 1, kind: CompletionItemKind.Function, detail: '', documentation: ''}],
-        ['set_polar2',       { params: 3, kind: CompletionItemKind.Function, detail: '', documentation: ''}],
-    ]));
-    
-}
-
-class Snippets {
-    static Snippets = Object.freeze(new Map([
-        ['for', {
-            label: 'For~',
-            kind: CompletionItemKind.Snippet,
-            detail: 'For Loop',
-            documentation: {
-                kind: MarkupKind.Markdown,
-                value: 'Creates a for loop'
-            },
-            insertText: 'for (${1:int i = 0}; ${2:i < length}; ${3:i++}) {\n\t${0}\n}',
-            insertTextFormat: InsertTextFormat.Snippet
-        }],
-        ['while', {
-            label: 'While~',
-            kind: CompletionItemKind.Snippet,
-            detail: 'While Loop',
-            documentation: {
-                kind: MarkupKind.Markdown,
-                value: 'Creates a while loop'
-            },
-            insertText: 'while (${1:condition}) {\n\t${0}\n}',
-            insertTextFormat: InsertTextFormat.Snippet
-        }],
-        ['if', {
-            label: 'If~',
-            kind: CompletionItemKind.Snippet,
-            detail: 'If Statement',
-            documentation: {
-                kind: MarkupKind.Markdown,
-                value: 'Creates an if statement'
-            },
-            insertText: 'if (${1:condition}) {\n\t${0}\n}',
-            insertTextFormat: InsertTextFormat.Snippet
-        }],
-        ['ifelse', {
-            label: 'Ifelse~',
-            kind: CompletionItemKind.Snippet,
-            detail: 'If-Else Statement',
-            documentation: {
-                kind: MarkupKind.Markdown,
-                value: 'Creates an if-else statement'
-            },
-            insertText: 'if (${1:condition}) {\n\t${2}\n} else {\n\t${0}\n}',
-            insertTextFormat: InsertTextFormat.Snippet
-        }],
-        ['function', {
-            label: 'Function~',
-            kind: CompletionItemKind.Snippet,
-            detail: 'Function Definition',
-            documentation: {
-                kind: MarkupKind.Markdown,
-                value: 'Create a Function'
-            },
-            insertText: 'function ${1:name}() {\n\t\n}',
-            insertTextFormat: InsertTextFormat.Snippet
-        }]
-    ]));
-}
-
 connection.onInitialize(() => {
     return {
         capabilities: {
             textDocumentSync: TextDocumentSyncKind.Incremental,
             completionProvider: {
                 resolveProvider: true,
-                triggerCharacters: 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('')
+                triggerCharacters:
+                    "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"
+                        .split(""),
             },
             hoverProvider: true,
             definitionProvider: true,
-        }
+            documentSymbolProvider: true,
+            renameProvider: true,
+            referencesProvider: true,
+        },
     };
 });
 
@@ -1181,7 +49,7 @@ documents.onDidChangeContent((change) => {
 
 function parseVariables(document) {
     const text = document.getText();
-  
+
     variableDeclarations.clear();
 
     let match;
@@ -1189,33 +57,40 @@ function parseVariables(document) {
     while ((match = GPC.Regex.NON_ARRAY.exec(text)) !== null) {
         const type = match[1];
         const VarName = match[2];
-        
-        const lineStart = text.lastIndexOf('\n', match.index) + 1;
-        const lineEnd = text.indexOf('\n', match.index);
-        const fullDefinition = text.substring(lineStart, lineEnd !== -1 ? lineEnd : text.length);
-    
-        variableDeclarations.set(VarName, { 
-            type: type, 
-            detail: `${type} Variable`, 
+
+        const lineStart = text.lastIndexOf("\n", match.index) + 1;
+        const lineEnd = text.indexOf("\n", match.index);
+        const fullDefinition = text.substring(
+            lineStart,
+            lineEnd !== -1 ? lineEnd : text.length,
+        );
+
+        variableDeclarations.set(VarName, {
+            type: type,
+            detail: `${type} Variable`,
             documentation: `${match[0]}`,
             fullDefinition: fullDefinition.trim(),
             insertText: `${VarName}`,
-            insertTextFormat: InsertTextFormat.PlainText
+            insertTextFormat: InsertTextFormat.PlainText,
         });
     }
-    
+
     while ((match = GPC.Regex.ARRAY_1D.exec(text)) !== null) {
         const type = match[1];
         const arrayName = match[2].trim();
-        const content = match[3] || '';
-        
-        const values = content.split(',').map(item => item.trim());
-              
+        const content = match[3] || "";
+
+        const values = content
+            .replace(/\/\*[\s\S]*?\*\//g, "") // Remove block comments
+            .replace(/\/\/[^\n]*/g, "") // Remove line comments
+            .split(",")
+            .map((item) => item.trim());
+
         variableDeclarations.set(arrayName, {
-            type: 'array',
+            type: "array",
             detail: `1D ${type} Array | Size: ${values.length}`,
             documentation: match[0],
-            insertText: `${arrayName}` + '[${1:index}]',
+            insertText: `${arrayName}` + "[${1:index}]",
             insertTextFormat: InsertTextFormat.Snippet,
         });
     }
@@ -1224,50 +99,48 @@ function parseVariables(document) {
         const type = match[1];
         const arrayName = match[2];
         const content = match[3];
-        
+
         const rows = content.match(/\{[^}]*\}/g) || [];
-        const cleanRows = rows.map(row => {
+        const cleanRows = rows.map((row) => {
             const values = row
                 .slice(1, -1)
-                .split(',')
-                .map(v => v
-                    .replace(/\/\*[\s\S]*?\*\//g, '')
-                    .replace(/\/\/[^\n]*/g, '')
-                    .trim()
-                )
+                .replace(/\/\*[\s\S]*?\*\//g, "") // Remove block comments
+                .replace(/\/\/[^\n]*/g, "") // Remove line comments
+                .split(",")
+                .map((v) => v.trim())
                 .filter(Boolean);
-            
-            return `{${values.join(', ')}}`;
+
+            return `{${values.join(", ")}}`;
         });
-        
-                
+
         variableDeclarations.set(arrayName, {
-            type: 'array',
+            type: "array",
             detail: `2D ${type} Array | Size: ${cleanRows.length}`,
             documentation: match[0],
-            insertText: `${arrayName}` + '[${1:row}][${2:column}]',
-            insertTextFormat: InsertTextFormat.Snippet
+            insertText: `${arrayName}` + "[${1:row}][${2:column}]",
+            insertTextFormat: InsertTextFormat.Snippet,
         });
     }
 
     while ((match = GPC.Regex.ENUM.exec(text)) !== null) {
-        const enumContent = match[0].slice(match[0].indexOf('{') + 1, match[0].lastIndexOf('}'));
-                
+        const enumContent = match[0]
+            .slice(match[0].indexOf("{") + 1, match[0].lastIndexOf("}"))
+            .replace(/\/\*[\s\S]*?\*\//g, "") // Remove block comments
+            .replace(/\/\/[^\n]*/g, ""); // Remove line comments
+
         const variables = enumContent
-            .replace(/\/\*[\s\S]*?\*\//g, '') 
-            .replace(/\/\/[^\n]*/g, '')        
-            .split(',')
-            .map(variable => variable.trim())
-            .map(variable => variable.split('=')[0].trim())
-            .filter(variable => variable);
-    
-        variables.forEach(variable => {
+            .split(",")
+            .map((variable) => variable.trim())
+            .map((variable) => variable.split("=")[0].trim())
+            .filter((variable) => variable);
+
+        variables.forEach((variable) => {
             variableDeclarations.set(variable, {
-                type: 'enum',
-                detail: 'enum variable member',
+                type: "enum",
+                detail: "enum variable member",
                 documentation: `Declaration:\nenum {\n ${enumContent}\n}`,
                 insertText: variable,
-                insertTextFormat: InsertTextFormat.PlainText
+                insertTextFormat: InsertTextFormat.PlainText,
             });
         });
     }
@@ -1282,18 +155,20 @@ function parseFunctions(document) {
 
     while ((match = GPC.Regex.FUNCTION.exec(text)) !== null) {
         const functionName = match[1];
-        const paramsStr = match[2] || '';
-        const params = paramsStr.trim().split(/\s*,\s*/).filter(p => p !== '');
-        
+        const paramsStr = match[2] || "";
+        const params = paramsStr.trim().split(/\s*,\s*/).filter((p) =>
+            p !== ""
+        );
+
         let openBraces = 0;
         let closeBraces = 0;
         let startIndex = match.index;
         let endIndex = match.index;
-        
+
         for (let i = match.index; i < text.length; i++) {
-            if (text[i] === '{') {
+            if (text[i] === "{") {
                 openBraces++;
-            } else if (text[i] === '}') {
+            } else if (text[i] === "}") {
                 closeBraces++;
                 if (openBraces === closeBraces) {
                     endIndex = i + 1;
@@ -1301,20 +176,22 @@ function parseFunctions(document) {
                 }
             }
         }
-        
+
         const fullFunction = text.substring(startIndex, endIndex);
 
         functionDeclarations.set(functionName, {
-            type: 'function',
-            detail: 'Declared Function',
-            documentation: `Declaration:\nfunction ${functionName} (${params.join(', ')})`,
-            parameters: params.map(param => ({
+            type: "function",
+            detail: "Declared Function",
+            documentation: `Declaration:\nfunction ${functionName} (${
+                params.join(", ")
+            })`,
+            parameters: params.map((param) => ({
                 name: param,
-                type: 'parameter',
-                detail: 'Function parameter',
-                documentation: `Parameter of function ${functionName}`
+                type: "parameter",
+                detail: "Function parameter",
+                documentation: `Parameter of function ${functionName}`,
             })),
-            fullDefinition: fullFunction.trim()
+            fullDefinition: fullFunction.trim(),
         });
     }
 }
@@ -1327,16 +204,16 @@ function parseCombos(document) {
     let match;
     while ((match = GPC.Regex.COMBO.exec(text)) !== null) {
         const comboName = match[1];
-        
+
         let openBraces = 0;
         let closeBraces = 0;
         let startIndex = match.index;
         let endIndex = match.index;
-        
+
         for (let i = match.index; i < text.length; i++) {
-            if (text[i] === '{') {
+            if (text[i] === "{") {
                 openBraces++;
-            } else if (text[i] === '}') {
+            } else if (text[i] === "}") {
                 closeBraces++;
                 if (openBraces === closeBraces) {
                     endIndex = i + 1;
@@ -1344,14 +221,14 @@ function parseCombos(document) {
                 }
             }
         }
-        
+
         const fullCombo = text.substring(startIndex, endIndex);
-        
+
         comboDeclarations.set(comboName, {
-            type: 'combo',
-            detail: 'Declared Combo',
+            type: "combo",
+            detail: "Declared Combo",
             documentation: `Declaration:\ncombo ${comboName}`,
-            fullDefinition: fullCombo.trim()
+            fullDefinition: fullCombo.trim(),
         });
     }
 }
@@ -1362,129 +239,105 @@ async function validateDocument(document) {
     const folders = await connection.workspace.getWorkspaceFolders();
     const hasWorkspace = folders && folders.length > 0;
 
-    
     let decimalMatch;
     while ((decimalMatch = GPC.Regex.DECIMAL.exec(text)) !== null) {
         const startPos = getPositionFromOffset(document, decimalMatch.index);
-        const endPos = getPositionFromOffset(document, decimalMatch.index + decimalMatch[0].length);
-        
+        const endPos = getPositionFromOffset(
+            document,
+            decimalMatch.index + decimalMatch[0].length,
+        );
+
         diagnostics.push({
             severity: DiagnosticSeverity.Warning,
             range: {
                 start: startPos,
-                end: endPos
+                end: endPos,
             },
-            message: `Decimal numbers are not allowed in GPC and will be rounded up.`,
-            source: 'GPC Language Server'
+            message:
+                `Decimal numbers are not allowed in GPC and will be rounded up.`,
+            source: "GPC Language Server",
         });
     }
 
     let includeMatch;
     while ((includeMatch = GPC.Regex.INCLUDE.exec(text)) !== null) {
         const startPos = getPositionFromOffset(document, includeMatch.index);
-        const endPos = getPositionFromOffset(document, includeMatch.index + includeMatch[0].length);
+        const endPos = getPositionFromOffset(
+            document,
+            includeMatch.index + includeMatch[0].length,
+        );
 
         if (!hasWorkspace) {
             diagnostics.push({
                 severity: DiagnosticSeverity.Error,
                 range: {
                     start: startPos,
-                    end: endPos
+                    end: endPos,
                 },
-                message: 'Include statements must be used in a Toriel based project.',
-                source: 'GPC Language Server',
+                message:
+                    "Include statements must be used in a Toriel based project.",
+                source: "GPC Language Server",
                 relatedInformation: [
                     {
                         location: {
-                            uri: 'https://github.com/zkiwiko/vscode-gpc-extension/#Projects',
+                            uri: "https://github.com/zkiwiko/vscode-gpc-extension/#Projects",
                             range: {
                                 start: { line: 0, character: 0 },
-                                end: { line: 0, character: 0 }
-                            }
+                                end: { line: 0, character: 0 },
+                            },
                         },
-                        message: 'Learn more about Toriel GPC projects'
-                    }
-                ]
+                        message: "Learn more about Toriel GPC projects",
+                    },
+                ],
             });
         }
     }
 
     let singleQuoteMatch;
-    while ((singleQuoteMatch = GPC.Regex.SINGLE_QUOTE_STRING.exec(text)) !== null) {
-        const startPos = getPositionFromOffset(document, singleQuoteMatch.index);
-        const endPos = getPositionFromOffset(document, singleQuoteMatch.index + singleQuoteMatch[0].length);
+    while (
+        (singleQuoteMatch = GPC.Regex.SINGLE_QUOTE_STRING.exec(text)) !== null
+    ) {
+        const startPos = getPositionFromOffset(
+            document,
+            singleQuoteMatch.index,
+        );
+        const endPos = getPositionFromOffset(
+            document,
+            singleQuoteMatch.index + singleQuoteMatch[0].length,
+        );
 
         diagnostics.push({
             severity: DiagnosticSeverity.Error,
             range: {
                 start: startPos,
-                end: endPos
+                end: endPos,
             },
             message: `Strings must be enclosed in double quotes (").`,
-            source: 'GPC Language Server'
+            source: "GPC Language Server",
         });
     }
 
     let unknownCharMatch;
-    while((unknownCharMatch = GPC.Regex.UNKNOWN.exec(text)) !== null) {
-        const startPos = getPositionFromOffset(document, unknownCharMatch.index);
-        const endPos = getPositionFromOffset(document, unknownCharMatch.index + unknownCharMatch[0].length);
+    while ((unknownCharMatch = GPC.Regex.UNKNOWN.exec(text)) !== null) {
+        const startPos = getPositionFromOffset(
+            document,
+            unknownCharMatch.index,
+        );
+        const endPos = getPositionFromOffset(
+            document,
+            unknownCharMatch.index + unknownCharMatch[0].length,
+        );
         diagnostics.push({
             severity: DiagnosticSeverity.Warning,
             range: {
                 start: startPos,
-                end: endPos
+                end: endPos,
             },
-            message: 'Unknown Character, when compiled it will be seen as whitespace.',
-            source: 'GPC Language Server'
+            message:
+                "Unknown Character, when compiled it will be seen as whitespace.",
+            source: "GPC Language Server",
         });
     }
-
-    let functionMatch;
-    while ((functionMatch = GPC.Regex.FUNCTION_CALL.exec(text)) !== null) {
-        const functionName = functionMatch[1];
-        const providedParams = functionMatch[2].trim();
-        const providedParamCount = providedParams === '' ? 0 : providedParams.split(',').length;
-
-        const lineStartIndex = text.lastIndexOf('\n', functionMatch.index) + 1;
-        const lineBeforeMatch = text.substring(lineStartIndex, functionMatch.index);
-
-        if (lineBeforeMatch.trim().startsWith('function') || /function\s+/.test(lineBeforeMatch)) {
-            continue;
-        }
-
-        const checkFunctionParams = (expectedParamCount, message) => {
-            if (providedParamCount !== expectedParamCount) {
-                const startPos = getPositionFromOffset(document, functionMatch.index);
-                const endPos = getPositionFromOffset(document, functionMatch.index + functionMatch[0].length);
-
-                diagnostics.push({
-                    severity: DiagnosticSeverity.Error,
-                    range: {
-                        start: startPos,
-                        end: endPos
-                    },
-                    message: message,
-                    source: 'GPC Language Server'
-                });
-            }
-        };
-
-        if (functionDeclarations.has(functionName)) {
-            const funcInfo = functionDeclarations.get(functionName);
-            const expectedParamCount = funcInfo.parameters ? funcInfo.parameters.length : 0;
-            checkFunctionParams(expectedParamCount, `Function '${functionName}' expects ${expectedParamCount} parameter${expectedParamCount !== 1 ? 's' : ''}, but got ${providedParamCount}.`);
-        }
-
-        if (GPC.BuiltInFunctions.has(functionName)) {
-            const builtInFunc = GPC.BuiltInFunctions.get(functionName);
-            if (builtInFunc.params !== undefined) {
-                const expectedParamCount = builtInFunc.params;
-                checkFunctionParams(expectedParamCount, `Built-in function '${functionName}' expects ${expectedParamCount} parameter${expectedParamCount !== 1 ? 's' : ''}, but got ${providedParamCount}.`);
-            }
-        }
-    }
-
 
     connection.sendDiagnostics({ uri: document.uri, diagnostics });
 }
@@ -1493,16 +346,16 @@ function getPositionFromOffset(document, offset) {
     const text = document.getText();
     let line = 0;
     let character = 0;
-    
+
     for (let i = 0; i < offset; i++) {
-        if (text[i] === '\n') {
+        if (text[i] === "\n") {
             line++;
             character = 0;
         } else {
             character++;
         }
     }
-    
+
     return { line, character };
 }
 
@@ -1512,13 +365,13 @@ connection.onCompletion((textDocumentPosition) => {
 
     const lineText = document.getText({
         start: { line: position.line, character: 0 },
-        end: position
+        end: position,
     });
 
     const completions = [];
-    
+
     const wordMatch = lineText.match(/@?\w*$/);
-    const lastWord = wordMatch ? wordMatch[0].toLowerCase() : '';
+    const lastWord = wordMatch ? wordMatch[0].toLowerCase() : "";
 
     for (const [keyword, info] of GPC.Keywords) {
         if (keyword.toLowerCase().startsWith(lastWord)) {
@@ -1528,9 +381,9 @@ connection.onCompletion((textDocumentPosition) => {
                 detail: info.detail,
                 documentation: {
                     kind: MarkupKind.Markdown,
-                    value: `\`\`\`gpc\n${info.documentation}\n\`\`\``
+                    value: `\`\`\`gpc\n${info.documentation}\n\`\`\``,
                 },
-                data: { type: 'keyword', keyword }
+                data: { type: "keyword", keyword },
             });
         }
     }
@@ -1543,9 +396,9 @@ connection.onCompletion((textDocumentPosition) => {
                 detail: info.detail,
                 documentation: {
                     kind: MarkupKind.Markdown,
-                    value: `\`\`\`gpc\n${info.documentation}\n\`\`\``
+                    value: `\`\`\`gpc\n${info.documentation}\n\`\`\``,
                 },
-                data: { type: 'constant', constant }
+                data: { type: "constant", constant },
             });
         }
     }
@@ -1558,9 +411,9 @@ connection.onCompletion((textDocumentPosition) => {
                 detail: info.detail,
                 documentation: {
                     kind: MarkupKind.Markdown,
-                    value: `\`\`\`gpc\n${info.documentation}\n\`\`\``
+                    value: `\`\`\`gpc\n${info.documentation}\n\`\`\``,
                 },
-                data: { type: 'type', type }
+                data: { type: "type", type },
             });
         }
     }
@@ -1573,11 +426,11 @@ connection.onCompletion((textDocumentPosition) => {
                 detail: info.detail,
                 documentation: {
                     kind: MarkupKind.Markdown,
-                    value: `\`\`\`gpc\n${info.documentation}\n\`\`\``
+                    value: `\`\`\`gpc\n${info.documentation}\n\`\`\``,
                 },
                 insertText: `${funcName}($0)`,
                 insertTextFormat: InsertTextFormat.Snippet,
-                data: { type: 'builtinFunc', funcName }
+                data: { type: "builtinFunc", funcName },
             });
         }
     }
@@ -1590,11 +443,11 @@ connection.onCompletion((textDocumentPosition) => {
                 detail: info.detail,
                 documentation: {
                     kind: MarkupKind.Markdown,
-                    value: `\`\`\`gpc\n${info.documentation}\n\`\`\``
+                    value: `\`\`\`gpc\n${info.documentation}\n\`\`\``,
                 },
-                data: { type: 'variable', varName },
+                data: { type: "variable", varName },
                 insertText: info.insertText,
-                insertTextFormat: info.insertTextFormat
+                insertTextFormat: info.insertTextFormat,
             });
         }
     }
@@ -1607,11 +460,11 @@ connection.onCompletion((textDocumentPosition) => {
                 detail: info.detail,
                 documentation: {
                     kind: MarkupKind.Markdown,
-                    value: `\`\`\`gpc\n${info.documentation}\n\`\`\``
+                    value: `\`\`\`gpc\n${info.documentation}\n\`\`\``,
                 },
                 insertText: `${funcName}($0)`,
                 insertTextFormat: InsertTextFormat.Snippet,
-                data: { type: 'function', funcName }
+                data: { type: "function", funcName },
             });
         }
     }
@@ -1624,9 +477,9 @@ connection.onCompletion((textDocumentPosition) => {
                 detail: info.detail,
                 documentation: {
                     kind: MarkupKind.Markdown,
-                    value: `\`\`\`gpc\n${info.documentation}\n\`\`\``
+                    value: `\`\`\`gpc\n${info.documentation}\n\`\`\``,
                 },
-                data: { type: 'combo', comboName }
+                data: { type: "combo", comboName },
             });
         }
     }
@@ -1639,7 +492,7 @@ connection.onCompletion((textDocumentPosition) => {
                 detail: snippet.detail,
                 documentation: snippet.documentation,
                 insertText: snippet.insertText,
-                insertTextFormat: snippet.insertTextFormat
+                insertTextFormat: snippet.insertTextFormat,
             });
         }
     }
@@ -1649,80 +502,80 @@ connection.onCompletion((textDocumentPosition) => {
 
 connection.onCompletionResolve((item) => {
     const data = item.data;
-    if (data?.type === 'keyword') {
+    if (data?.type === "keyword") {
         const keyword = GPC.Keywords.get(data.keyword);
         if (keyword) {
             item.detail = keyword.detail;
             item.documentation = {
                 kind: MarkupKind.Markdown,
-                value: `\`\`\`gpc\n${keyword.documentation}\n\`\`\``
+                value: `\`\`\`gpc\n${keyword.documentation}\n\`\`\``,
             };
         }
     }
 
-    if(data?.type === 'constant') {
+    if (data?.type === "constant") {
         const constant = GPC.Constants.get(data.constant);
         if (constant) {
             item.detail = constant.detail;
             item.documentation = {
                 kind: MarkupKind.Markdown,
-                value: `\`\`\`gpc\n${constant.documentation}\n\`\`\``
+                value: `\`\`\`gpc\n${constant.documentation}\n\`\`\``,
             };
         }
     }
 
-    if(data?.type === 'variable') {
+    if (data?.type === "variable") {
         const variable = variableDeclarations.get(data.varName);
         if (variable) {
             item.detail = variable.detail;
             item.documentation = {
                 kind: MarkupKind.Markdown,
-                value: `\`\`\`gpc\n${variable.documentation}\n\`\`\``
+                value: `\`\`\`gpc\n${variable.documentation}\n\`\`\``,
             };
         }
     }
 
-    if(data?.type === 'builtinFunc') {
+    if (data?.type === "builtinFunc") {
         const builtinFunc = GPC.BuiltInFunctions.get(data.funcName);
         if (builtinFunc) {
             item.detail = builtinFunc.detail;
             item.documentation = {
                 kind: MarkupKind.Markdown,
-                value: `\`\`\`gpc\n${builtinFunc.documentation}\n\`\`\``
+                value: `\`\`\`gpc\n${builtinFunc.documentation}\n\`\`\``,
             };
         }
     }
 
-    if(data?.type === 'combo') {
+    if (data?.type === "combo") {
         const combo = comboDeclarations.get(data.comboName);
         if (combo) {
             item.detail = combo.detail;
             item.documentation = {
                 kind: MarkupKind.Markdown,
-                value: `\`\`\`gpc\n${combo.documentation}\n\`\`\``
+                value: `\`\`\`gpc\n${combo.documentation}\n\`\`\``,
             };
         }
     }
 
-    if(data?.type === 'type') {
+    if (data?.type === "type") {
         const type = GPC.DataTypes.get(data.type);
         if (type) {
             item.detail = type.detail;
             item.documentation = {
                 kind: MarkupKind.Markdown,
-                value: `\`\`\`gpc\n${type.documentation}\n\`\`\``
+                value: `\`\`\`gpc\n${type.documentation}\n\`\`\``,
             };
         }
     }
 
-    if(data?.type === 'function') {
+    if (data?.type === "function") {
         const func = functionDeclarations.get(data.funcName);
         if (func) {
-            const params = func.parameters?.map(p => p.name).join(', ') || '';
+            const params = func.parameters?.map((p) => p.name).join(", ") || "";
             item.detail = func.detail;
             item.documentation = {
                 kind: MarkupKind.Markdown,
-                value: `\`\`\`gpc\n${func.documentation}\n\`\`\``
+                value: `\`\`\`gpc\n${func.documentation}\n\`\`\``,
             };
         }
     }
@@ -1742,8 +595,8 @@ connection.onHover((params) => {
         return {
             contents: {
                 kind: MarkupKind.Markdown,
-                value: `\n\n${hoverInfo.detail}`
-            }
+                value: `\n\n${hoverInfo.detail}`,
+            },
         };
     }
 
@@ -1755,16 +608,17 @@ function getHoverInfo(word) {
         const variableInfo = variableDeclarations.get(word);
         return {
             type: variableInfo.detail,
-            detail: `\`\`\`gpc\n${variableInfo.documentation}\n\`\`\``
+            detail: `\`\`\`gpc\n${variableInfo.documentation}\n\`\`\``,
         };
     }
 
     if (functionDeclarations.has(word)) {
         const functionInfo = functionDeclarations.get(word);
-        const params = functionInfo.parameters?.map(p => p.name).join(', ') || '';
+        const params = functionInfo.parameters?.map((p) => p.name).join(", ") ||
+            "";
         return {
             type: `${functionInfo.detail}: ${word}(${params})`,
-            detail: `\`\`\`gpc\n${functionInfo.documentation}\n\`\`\``
+            detail: `\`\`\`gpc\n${functionInfo.documentation}\n\`\`\``,
         };
     }
 
@@ -1772,7 +626,7 @@ function getHoverInfo(word) {
         const comboInfo = comboDeclarations.get(word);
         return {
             type: comboInfo.detail,
-            detail: `\`\`\`gpc\n${comboInfo.documentation}\n\`\`\``
+            detail: `\`\`\`gpc\n${comboInfo.documentation}\n\`\`\``,
         };
     }
 
@@ -1780,7 +634,7 @@ function getHoverInfo(word) {
     if (keywordInfo) {
         return {
             type: keywordInfo.detail,
-            detail: `\`\`\`gpc\n${keywordInfo.documentation}\n\`\`\``
+            detail: `\`\`\`gpc\n${keywordInfo.documentation}\n\`\`\``,
         };
     }
 
@@ -1788,7 +642,7 @@ function getHoverInfo(word) {
     if (biFuncInfo) {
         return {
             type: biFuncInfo.detail,
-            detail: `\`\`\`gpc\n${biFuncInfo.documentation}\n\`\`\``
+            detail: `\`\`\`gpc\n${biFuncInfo.documentation}\n\`\`\``,
         };
     }
 
@@ -1796,7 +650,7 @@ function getHoverInfo(word) {
     if (biDataType) {
         return {
             type: biDataType.detail,
-            detail: `\`\`\`gpc\n${biDataType.documentation}\n\`\`\``
+            detail: `\`\`\`gpc\n${biDataType.documentation}\n\`\`\``,
         };
     }
 
@@ -1806,7 +660,7 @@ function getHoverInfo(word) {
 function getWordAtPosition(document, position) {
     const line = document.getText({
         start: { line: position.line, character: 0 },
-        end: { line: position.line + 1, character: 0 }
+        end: { line: position.line + 1, character: 0 },
     });
 
     const wordPattern = /[a-zA-Z_]\w*/g;
@@ -1824,8 +678,185 @@ function getWordAtPosition(document, position) {
             return exactWord;
         }
     }
-    return '';
+    return "";
 }
+
+connection.onDocumentSymbol((params) => {
+    const document = documents.get(params.textDocument.uri);
+    if (!document) return [];
+
+    const symbols = [];
+
+    // Add variable symbols
+    for (const [varName, info] of variableDeclarations) {
+        symbols.push({
+            name: varName,
+            kind: CompletionItemKind.Variable,
+            location: {
+                uri: params.textDocument.uri,
+                range: {
+                    start: getPositionFromOffset(
+                        document,
+                        document.getText().indexOf(varName),
+                    ),
+                    end: getPositionFromOffset(
+                        document,
+                        document.getText().indexOf(varName) + varName.length,
+                    ),
+                },
+            },
+            detail: info.detail,
+        });
+    }
+
+    // Add function symbols
+    for (const [funcName, info] of functionDeclarations) {
+        symbols.push({
+            name: funcName,
+            kind: CompletionItemKind.Function,
+            location: {
+                uri: params.textDocument.uri,
+                range: {
+                    start: getPositionFromOffset(
+                        document,
+                        document.getText().indexOf(funcName),
+                    ),
+                    end: getPositionFromOffset(
+                        document,
+                        document.getText().indexOf(funcName) + funcName.length,
+                    ),
+                },
+            },
+            detail: info.detail,
+        });
+    }
+
+    // Add combo symbols
+    for (const [comboName, info] of comboDeclarations) {
+        symbols.push({
+            name: comboName,
+            kind: CompletionItemKind.Method,
+            location: {
+                uri: params.textDocument.uri,
+                range: {
+                    start: getPositionFromOffset(
+                        document,
+                        document.getText().indexOf(comboName),
+                    ),
+                    end: getPositionFromOffset(
+                        document,
+                        document.getText().indexOf(comboName) +
+                            comboName.length,
+                    ),
+                },
+            },
+            detail: info.detail,
+        });
+    }
+
+    return symbols;
+});
+
+connection.onRenameRequest((params) => {
+    const document = documents.get(params.textDocument.uri);
+    if (!document) return null;
+
+    const position = params.position;
+    const word = getWordAtPosition(document, position);
+    const newName = params.newName;
+
+    const text = document.getText();
+    const edits = [];
+    let match;
+    const regex = new RegExp(`\\b${word}\\b`, "g");
+
+    while ((match = regex.exec(text)) !== null) {
+        edits.push({
+            range: {
+                start: getPositionFromOffset(document, match.index),
+                end: getPositionFromOffset(document, match.index + word.length),
+            },
+            newText: newName,
+        });
+    }
+
+    return {
+        changes: {
+            [params.textDocument.uri]: edits,
+        },
+    };
+});
+
+connection.onReferences((params) => {
+    const document = documents.get(params.textDocument.uri);
+    if (!document) return [];
+
+    const position = params.position;
+    const word = getWordAtPosition(document, position);
+
+    const references = [];
+    const text = document.getText();
+    let match;
+    const regex = new RegExp(`\\b${word}\\b`, "g");
+
+    while ((match = regex.exec(text)) !== null) {
+        references.push({
+            uri: params.textDocument.uri,
+            range: {
+                start: getPositionFromOffset(document, match.index),
+                end: getPositionFromOffset(document, match.index + word.length),
+            },
+        });
+    }
+
+    return references;
+});
+
+connection.onDefinition((params) => {
+    const document = documents.get(params.textDocument.uri);
+    if (!document) return null;
+
+    const position = params.position;
+    const word = getWordAtPosition(document, position);
+
+    if (variableDeclarations.has(word)) {
+        const variableInfo = variableDeclarations.get(word);
+        const offset = document.getText().indexOf(word);
+        return {
+            uri: params.textDocument.uri,
+            range: {
+                start: getPositionFromOffset(document, offset),
+                end: getPositionFromOffset(document, offset + word.length),
+            },
+        };
+    }
+
+    if (functionDeclarations.has(word)) {
+        const functionInfo = functionDeclarations.get(word);
+        const offset = document.getText().indexOf(word);
+        return {
+            uri: params.textDocument.uri,
+            range: {
+                start: getPositionFromOffset(document, offset),
+                end: getPositionFromOffset(document, offset + word.length),
+            },
+        };
+    }
+
+    if (comboDeclarations.has(word)) {
+        const comboInfo = comboDeclarations.get(word);
+        const offset = document.getText().indexOf(word);
+        return {
+            uri: params.textDocument.uri,
+            range: {
+                start: getPositionFromOffset(document, offset),
+                end: getPositionFromOffset(document, offset + word.length),
+            },
+        };
+    }
+
+    return null;
+});
 
 console.log("listening");
 documents.listen(connection);

@@ -40,7 +40,7 @@
 		  },
 		  {
 			"name": "entity.name.function.gpc",
-			"match": "\\b(\\w+)\\s*\\(",
+			"match": "\\b(\\w+)\\s*(?=\\()",
 			"captures": {
 			  "1": { "name": "entity.name.function.gpc" }
 			}

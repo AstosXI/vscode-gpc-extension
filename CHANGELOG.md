@@ -1,5 +1,24 @@
 # Change Log
 
+## 1.1.1 - 3/21/2025
+
+### Removed
+
+- Function parameter validation ( Temporarily )
+
+### Fixed
+
+- Arrays not being recognized if they have comments within them.
+
+### Added
+
+- Document symbols
+  - Press `Ctrl + Shift + P` then remove the `>` and type `@` to scroll through
+    the different variables and functions.
+- Symbol renaming
+- Symbol references
+- Go-to symbol definition
+
 ## 1.1.0 - 3/7/2025
 
 ### Fixed
